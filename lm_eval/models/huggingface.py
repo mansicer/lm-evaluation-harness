@@ -582,6 +582,15 @@ class HFLM(TemplateLM):
             self._model = PeftModel.from_pretrained(
                 self._model, peft, revision=revision
             )
+
+            if "qadapter" in peft:
+                import json
+                from .qadapter import modify_forward, modify_prepare_inputs_for_generation
+
+                training_config_path = os.path.join(peft, "training_config.json")
+                training_config = json.load(open(training_config_path, "r"))
+                self._model = modify_forward(self._model, alpha=training_config["alpha"], omega=training_config["omega"], gamma=training_config["gamma"], register_callback=False)
+                self._model = modify_prepare_inputs_for_generation(self._model)
         elif delta:
             if autogptq:
                 eval_logger.warning(
