@@ -75,7 +75,7 @@ def modify_forward(peft_model: PeftModelForCausalLM, alpha, omega, gamma, regist
         q_values = adapter_model_logits
         base_log_pi = F.log_softmax(base_model_logits, dim=-1).detach()
         
-        if attention_mask:
+        if attention_mask is not None:
             if labels is not None:
                 input_mask = attention_mask.bool() & (labels != -100)
             else:
