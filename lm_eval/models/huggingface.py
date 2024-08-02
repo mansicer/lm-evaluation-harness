@@ -589,7 +589,7 @@ class HFLM(TemplateLM):
 
                 training_config_path = os.path.join(peft, "training_config.json")
                 training_config = json.load(open(training_config_path, "r"))
-                self._model = modify_forward(self._model, alpha=training_config["alpha"], omega=training_config["omega"], gamma=training_config["gamma"], register_callback=False)
+                self._model = modify_forward(self._model, alpha_tilde=training_config["alpha_tilde"], alpha_0=training_config["alpha_0"], gamma=training_config["gamma"], beta=training_config["beta"], register_callback=False)
                 self._model = modify_prepare_inputs_for_generation(self._model)
         elif delta:
             if autogptq:

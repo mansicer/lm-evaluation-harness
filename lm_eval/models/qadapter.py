@@ -22,7 +22,7 @@ class MetricCallback(TrainerCallback):
         logs.update(log_dict)
 
 
-def pref_loss(q_values_ai, values, mask, alpha, gamma):
+def qadapter_loss(q_values_ai, values, mask, gamma, beta=0.1):
     loss = 0.0
     log_dict = {}
 
@@ -36,18 +36,18 @@ def pref_loss(q_values_ai, values, mask, alpha, gamma):
     pref_loss = F.cross_entropy(logits, labels)
     loss += pref_loss
 
-    chi2_loss = 1 / (4 * alpha) * (reward**2 * mask).sum() / mask.sum()
-    loss += chi2_loss
+    reg_loss = beta * (reward**2 * mask).sum() / mask.sum()
+    loss += reg_loss
 
     log_dict["pref_loss"] = pref_loss.item()
-    log_dict["chi2_loss"] = chi2_loss.item()
+    log_dict["chi2_loss"] = reg_loss.item()
     log_dict["q_values_mean"] = ((q_values_ai * mask).sum() / mask.sum()).item()
     log_dict["values_mean"] = ((values * mask).sum() / mask.sum()).item()
     log_dict["reward_mean"] = ((reward * mask).sum() / mask.expand_as(reward).sum()).item()
     return loss, log_dict
 
 
-def modify_forward(peft_model: PeftModelForCausalLM, alpha, omega, gamma, register_callback=False):
+def modify_forward(peft_model: PeftModelForCausalLM, alpha_tilde, alpha_0, gamma, beta, register_callback=False):
     if register_callback:
         log_callback = MetricCallback()
 
@@ -80,12 +80,12 @@ def modify_forward(peft_model: PeftModelForCausalLM, alpha, omega, gamma, regist
                 input_mask = attention_mask.bool() & (labels != -100)
             else:
                 input_mask = attention_mask.bool()
-            values = alpha * torch.logsumexp((q_values + omega * base_log_pi) / alpha, dim=-1)
+            values = alpha_tilde * torch.logsumexp((q_values + alpha_0 * base_log_pi) / alpha_tilde, dim=-1)
             q_values_ai = torch.gather(q_values[:, :-1], -1, input_ids[:, 1:].unsqueeze(-1)).squeeze(-1)
 
-            loss, log_dict = pref_loss(q_values_ai=q_values_ai, values=values[:, :-1], mask=input_mask[:, :-1], alpha=alpha, gamma=gamma)
+            loss, log_dict = qadapter_loss(q_values_ai=q_values_ai, values=values[:, :-1], mask=input_mask[:, :-1], gamma=gamma, beta=beta)
 
-            logits = (q_values + omega * base_log_pi) / alpha
+            logits = (q_values + alpha_0 * base_log_pi) / alpha_tilde
             log_dict["base_log_pi"] = base_log_pi.mean().item()
             log_dict["logits_mean"] = logits.mean().item()
 
@@ -96,7 +96,7 @@ def modify_forward(peft_model: PeftModelForCausalLM, alpha, omega, gamma, regist
                     log_callback.log_dict[k] = arr
             return CausalLMOutputWithPast(loss=loss, logits=logits, past_key_values=(adapter_model_output.past_key_values, base_model_output.past_key_values), hidden_states=None, attentions=None)
         else:
-            logits = (q_values + omega * base_log_pi) / alpha
+            logits = (q_values + alpha_0 * base_log_pi) / alpha_tilde
             return CausalLMOutputWithPast(logits=logits, past_key_values=(adapter_model_output.past_key_values, base_model_output.past_key_values), hidden_states=None, attentions=None)
 
     peft_model.__original_forward = peft_model.forward
