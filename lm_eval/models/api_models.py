@@ -339,6 +339,7 @@ class TemplateAPI(TemplateLM):
                     generate=generate,
                     gen_kwargs=gen_kwargs,
                     seed=self._seed,
+                    timeout=20000.0,
                     **kwargs,
                 ),
                 headers=self.header,
@@ -381,6 +382,7 @@ class TemplateAPI(TemplateLM):
                 self.base_url,
                 json=payload,
                 headers=self.header,
+                timeout=20000.0,
             ) as response:
                 if not response.ok:
                     error_text = await response.text()
